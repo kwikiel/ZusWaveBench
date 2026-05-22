@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -21,6 +22,10 @@ DATA = ROOT / "data" / "benchmark.jsonl"
 RESULTS = ROOT / "results"
 TEMPLATE = ROOT / "scripts" / "site_template.html"
 OUTPUT = ROOT / "index.html"
+
+# SEO consolidates on codesota; the GitHub Pages copy points its canonical here too.
+CANONICAL = "https://www.codesota.com/zuswavebench"
+VERCEL_ANALYTICS = '<script defer src="/_vercel/insights/script.js"></script>'
 
 WEIGHTS = {
     "labels": 0.45,
@@ -116,7 +121,26 @@ def weighted_average(rows: list[dict[str, Any]]) -> float:
     return sum(float(r["weighted_score"]) for r in rows) / denom
 
 
+def pearson(xs: list[float], ys: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    mx, my = sum(xs) / n, sum(ys) / n
+    cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    vx = sum((x - mx) ** 2 for x in xs) ** 0.5
+    vy = sum((y - my) ** 2 for y in ys) ** 0.5
+    return cov / (vx * vy) if vx and vy else 0.0
+
+
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--output", type=Path, default=OUTPUT)
+    ap.add_argument("--canonical", default=CANONICAL)
+    ap.add_argument("--analytics", choices=["none", "vercel"], default="none")
+    ap.add_argument("--write-comparison", action="store_true", default=False,
+                    help="also (re)write results/model_comparison_full.md")
+    args = ap.parse_args()
+
     items = load_jsonl(DATA)
     item_by_id = {it["id"]: it for it in items}
 
@@ -197,6 +221,78 @@ def main() -> int:
             }
         )
 
+    # ---- LLM-judge ensemble (secondary, neutral cross-check) ----
+    judge_path = RESULTS / "judge_scores.jsonl"
+    judges: list[str] = []
+    judge_meta: dict[str, Any] = {}
+    has_judge = judge_path.exists()
+    if has_judge:
+        jrows = load_jsonl(judge_path)
+        judges = sorted({r["judge"] for r in jrows})
+        jscore: dict[tuple, dict] = defaultdict(dict)
+        jreason: dict[tuple, dict] = defaultdict(dict)
+        for r in jrows:
+            if r.get("score") is not None:
+                jscore[(r["model"], r["id"])][r["judge"]] = float(r["score"])
+            if r.get("reason"):
+                jreason[(r["model"], r["id"])][r["judge"]] = r["reason"]
+
+        def ensemble(mkey, iid):
+            vals = list(jscore.get((mkey, iid), {}).values())
+            return sum(vals) / len(vals) if vals else None
+
+        for it in items:
+            for m in MODELS:
+                k = m["key"]
+                if k not in item_models[it["id"]]:
+                    continue
+                ens = ensemble(k, it["id"])
+                item_models[it["id"]][k]["judge"] = {
+                    "ensemble": round(ens, 3) if ens is not None else None,
+                    "scores": {j: round(s, 2) for j, s in jscore.get((k, it["id"]), {}).items()},
+                    "reasons": jreason.get((k, it["id"]), {}),
+                }
+
+        all_rules: list[float] = []
+        all_judge: list[float] = []
+        for m in models_out:
+            k = m["key"]
+            num = den = 0.0
+            rules_pts: list[float] = []
+            judge_pts: list[float] = []
+            for it in items:
+                ens = ensemble(k, it["id"])
+                if ens is None or k not in item_models[it["id"]]:
+                    continue
+                w = float(it["weight"])
+                num += ens * w
+                den += w
+                rules_pts.append(item_models[it["id"]][k]["score"])
+                judge_pts.append(ens)
+            all_rules += rules_pts
+            all_judge += judge_pts
+            m["judge"] = round(num / den, 3) if den else None
+            m["judge_corr"] = round(pearson(rules_pts, judge_pts), 3) if len(rules_pts) > 2 else None
+            m["judge_mad"] = (
+                round(sum(abs(a - b) for a, b in zip(rules_pts, judge_pts)) / len(rules_pts), 3)
+                if rules_pts else None
+            )
+            m["judge_delta"] = round(m["judge"] - m["score"], 3) if m["judge"] is not None else None
+
+        # global rules-vs-judge agreement (across all model x item points)
+        if all_rules:
+            rules_order = [x["key"] for x in sorted(models_out, key=lambda z: -z["score"])]
+            judge_order = [x["key"] for x in sorted(models_out, key=lambda z: -(z["judge"] or 0))]
+            judge_meta = {
+                "globalCorr": round(pearson(all_rules, all_judge), 3),
+                "meanDelta": round(sum(j - r for r, j in zip(all_rules, all_judge)) / len(all_rules), 3),
+                "mad": round(sum(abs(j - r) for r, j in zip(all_rules, all_judge)) / len(all_rules), 3),
+                "n": len(all_rules),
+                "sameRanking": rules_order == judge_order,
+            }
+        else:
+            judge_meta = {}
+
     models_out.sort(key=lambda m: m["score"], reverse=True)
 
     items_out = []
@@ -236,6 +332,9 @@ def main() -> int:
         "domainScores": domain_scores,
         "taskScores": task_scores,
         "items": items_out,
+        "hasJudge": has_judge,
+        "judges": judges,
+        "judgeMeta": judge_meta,
     }
 
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -243,25 +342,32 @@ def main() -> int:
     payload = payload.replace("<", "\\u003c")
 
     template = TEMPLATE.read_text(encoding="utf-8")
-    html = template.replace("__ZWB_DATA__", payload)
-    OUTPUT.write_text(html, encoding="utf-8")
+    html = (
+        template
+        .replace("__ZWB_DATA__", payload)
+        .replace("__CANONICAL__", args.canonical)
+        .replace("__ANALYTICS__", VERCEL_ANALYTICS if args.analytics == "vercel" else "")
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(html, encoding="utf-8")
 
-    # Keep the markdown comparison table in sync with the site.
-    comp = [
-        "# Model Comparison Full Benchmark",
-        "",
-        "| Model | Items | Weighted score | JSON valid | Avg latency | Total tokens | Cost | Errors |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
-    ]
-    for m in models_out:
-        lat = f"{m['latency']:.2f}s" if m["latency"] is not None else "—"
-        comp.append(
-            f"| {m['name']} | {m['json_total']} | {m['score']:.3f} | "
-            f"{m['json_valid']}/{m['json_total']} | {lat} | {m['tokens']} | {m['cost']} | {m['errors']} |"
-        )
-    (RESULTS / "model_comparison_full.md").write_text("\n".join(comp) + "\n", encoding="utf-8")
+    # Keep the markdown comparison table in sync with the site (default build only).
+    if args.write_comparison or args.output == OUTPUT:
+        comp = [
+            "# Model Comparison Full Benchmark",
+            "",
+            "| Model | Items | Weighted score | JSON valid | Avg latency | Total tokens | Cost | Errors |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for m in models_out:
+            lat = f"{m['latency']:.2f}s" if m["latency"] is not None else "—"
+            comp.append(
+                f"| {m['name']} | {m['json_total']} | {m['score']:.3f} | "
+                f"{m['json_valid']}/{m['json_total']} | {lat} | {m['tokens']} | {m['cost']} | {m['errors']} |"
+            )
+        (RESULTS / "model_comparison_full.md").write_text("\n".join(comp) + "\n", encoding="utf-8")
 
-    print(f"Wrote {OUTPUT.relative_to(ROOT)} ({len(html):,} bytes)")
+    print(f"Wrote {args.output} ({len(html):,} bytes) canonical={args.canonical} analytics={args.analytics}")
     print("Overall weighted scores:")
     for m in models_out:
         print(

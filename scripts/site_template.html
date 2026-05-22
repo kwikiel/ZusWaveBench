@@ -8,6 +8,8 @@
 <meta property="og:title" content="ZusWaveBench">
 <meta property="og:description" content="Benchmark polskich spraw urzędowych dla modeli LLM — tablica wyników.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="__CANONICAL__">
+<link rel="canonical" href="__CANONICAL__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=VT323&display=swap" rel="stylesheet">
@@ -119,6 +121,17 @@ body{
 .stats{display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:9px; font-size:.84rem; color:#3a4a40}
 .stats span b{color:#10231a}
 .stats .k{font-family:var(--mono); font-size:1rem}
+.scorelabel{font-size:.68rem; font-weight:bold; text-transform:uppercase; letter-spacing:.05em; color:#5a6b60; width:54px; flex:0 0 auto}
+.judgeline{display:flex; align-items:center; gap:10px; margin-top:7px}
+.jbar{flex:1; height:14px; background:#efe7f3; border:1px solid #b79fc6; position:relative; overflow:hidden}
+.jbar i{position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#7b3aa0,#c08fe0); display:block}
+.jbar .pct{position:absolute; right:6px; top:50%; transform:translateY(-50%); font-weight:bold; font-size:.72rem; color:#3a1d52}
+.agree{font-size:.78rem; color:#5b3a6e; font-family:var(--mono); white-space:nowrap}
+.mh .badges2{display:flex; gap:4px; align-items:center}
+.jpill{font-family:var(--mono); font-size:.92rem; font-weight:bold; padding:1px 6px; border-radius:4px; background:#efe7f3; color:#3a1d52; border:1px solid #b79fc6}
+.jbreak{margin-top:7px; font-size:.74rem; color:#5b3a6e; border-top:1px dashed #d4c2e0; padding-top:5px}
+.jbreak b{color:#3a1d52}
+.jbreak .jr{display:block; margin-top:2px; color:#6a5a76}
 
 /* ---------- heatmaps ---------- */
 .heat{width:100%; border-collapse:collapse; font-size:.86rem; background:#fff}
@@ -375,6 +388,7 @@ pre.run{font-family:var(--mono); font-size:1.02rem; background:#0d1e14; color:#9
           <p>Każda pozycja jest punktowana od 0 do 1 metodą deterministyczną — celem jest praktyczna niezawodność, nie uroda prozy. Wynik ważony to średnia ważona wagą pozycji (trudność × ryzyko domeny).</p>
           <table class="wtable" id="wtable"></table>
           <p class="caveat" id="caveat"></p>
+          <div id="judgeNote"></div>
         </div>
         <div>
           <h4 style="margin-bottom:8px">Rodziny zadań</h4>
@@ -469,10 +483,19 @@ python3 scripts/evaluate.py --predictions results/run.jsonl --report results/run
         `<span class="name">${esc(m.name)}</span>
          <span class="meta">${esc(m.runtime)} · ${esc(m.quant)}</span>`));
       const sl = el("div","scoreline");
+      if(D.hasJudge) sl.appendChild(el("span","scorelabel","reguły"));
       const bar = el("div","bar");
       bar.innerHTML = `<i style="width:${pct(m.score)}%"></i><span class="pct">${m.score.toFixed(3)}</span>`;
       sl.appendChild(bar);
       main.appendChild(sl);
+      if(D.hasJudge && m.judge!=null){
+        const jl = el("div","judgeline");
+        jl.innerHTML =
+          `<span class="scorelabel">sędziowie</span>
+           <span class="jbar"><i style="width:${pct(m.judge)}%"></i><span class="pct">${m.judge.toFixed(3)}</span></span>
+           <span class="agree">${m.judge_delta!=null?(m.judge_delta>=0?'+':'')+m.judge_delta.toFixed(2)+' vs reguły':''}</span>`;
+        main.appendChild(jl);
+      }
       main.appendChild(el("div","stats",
         `<span class="k"><b>${m.json_valid}/${m.json_total}</b> poprawny JSON</span>
          <span class="k">⏱ <b>${m.latency!=null?m.latency+"s":"—"}</b> śr. latencja</span>
@@ -524,7 +547,18 @@ python3 scripts/evaluate.py --predictions results/run.jsonl --report results/run
       ["Poprawny JSON (json_validity)", D.weights.json_validity],
     ];
     rows.forEach(([l,v])=>{const tr=el("tr"); tr.appendChild(el("td",null,esc(l))); tr.appendChild(el("td",null,v.toFixed(2))); t.appendChild(tr);});
-    $("#caveat").innerHTML = "Zakazane twierdzenia są karane mocno: płynna odpowiedź typu „złóż odwołanie” na pismo niebędące decyzją albo „zapłać natychmiast” na zwykłe wezwanie do wyjaśnień traci dużo punktów.";
+    $("#caveat").innerHTML = "Zakazane twierdzenia są karane mocno: płynna odpowiedź typu „złóż odwołanie” na pismo niebędące decyzją albo „zapłać natychmiast” na zwykłe wezwanie do wyjaśnień traci dużo punktów. Dopasowanie jest świadome negacji — „X <b>nie jest</b> Y” nie liczy się jako twierdzenie „X to Y”.";
+    if(D.hasJudge && D.judges && D.judges.length){
+      const jl = D.judges.map(j=>`<code>${esc(j)}</code>`).join(", ");
+      const jm = D.judgeMeta || {};
+      const agree = (jm.globalCorr!=null)
+        ? `<p><b>Zgodność reguł i sędziów.</b> Ranking modeli jest ${jm.sameRanking?'identyczny':'niemal identyczny (GPT‑5.5 i Opus 4.7 remisują na szczycie, &plusmn;0,02)'} w obu metodach. Globalna korelacja na poziomie pojedynczych pozycji wynosi <b>r=${jm.globalCorr.toFixed(2)}</b> (${jm.n} punktów), a sędziowie LLM są średnio <b>łagodniejsi o ${jm.meanDelta>=0?'+':''}${jm.meanDelta.toFixed(2)}</b> (średnia |Δ|=${jm.mad.toFixed(2)}). To typowe: sędziowie nagradzają poprawną treść hojnie, reguły dają surowszą punktację cząstkową. Reguły pozostają metryką podstawową, bo są odtwarzalne; rozbieżności wskazują pozycje warte ręcznego sprawdzenia.</p>`
+        : "";
+      $("#judgeNote").innerHTML =
+        `<h4 style="margin:16px 0 6px">Reguły vs sędzia LLM (hybryda)</h4>
+         <p>Wynik <b>reguł</b> jest deterministyczny i odtwarzalny — to podstawowa metryka. Jako kontrolę krzyżową każdą odpowiedź ocenia też <b>panel neutralnych sędziów LLM</b> (${jl}) — celowo z <i>innych</i> rodzin niż modele oceniane, aby uniknąć faworyzowania własnej rodziny; sędziowie są „ślepi” na autora odpowiedzi (temp. 0). Na tablicy widać oba wyniki oraz różnicę Δ względem reguł.</p>
+         ${agree}`;
+    }
     $("#footmeta").innerHTML = `${D.meta.items} przypadków · ${D.meta.models} modele · zbudowano ${esc(D.meta.generated)} · `+
       `<a href="https://github.com/kwikiel/ZusWaveBench">źródło i dane na GitHubie</a>`;
   })();
@@ -569,10 +603,19 @@ python3 scripts/evaluate.py --predictions results/run.jsonl --report results/run
       const forb = (exp.forbidden_claims||[]).map(c=>`<span class="tag bad">⛔ ${esc(c)}</span>`).join("");
       const answers = D.models.map(m=>{
         const r=it.models[m.key];
+        const j=r.judge;
+        const jpill=(D.hasJudge && j && j.ensemble!=null)
+          ? `<span class="jpill" title="LLM-sędziowie (ensemble)">⚖️ ${j.ensemble.toFixed(2)}</span>` : "";
+        let jbreak="";
+        if(D.hasJudge && j && j.scores && Object.keys(j.scores).length){
+          const sc=Object.entries(j.scores).map(([jn,s])=>`${esc(jn.split("/").pop())} ${s}`).join(" · ");
+          const rs=Object.entries(j.reasons||{}).map(([jn,t])=>`<span class="jr">${esc(jn.split("/").pop())}: ${esc(t)}</span>`).join("");
+          jbreak=`<div class="jbreak"><b>Sędziowie:</b> ${sc}${rs}</div>`;
+        }
         return `<div class="mcard">
           <div class="mh"><span class="mn">${esc(m.short)}</span>
-            <span class="ms" style="background:${heatColor(r.score)}">${r.score.toFixed(2)}</span></div>
-          ${respHtml(r)}${flags(r)}</div>`;
+            <span class="badges2"><span class="ms" style="background:${heatColor(r.score)}" title="reguły">${r.score.toFixed(2)}</span>${jpill}</span></div>
+          ${respHtml(r)}${flags(r)}${jbreak}</div>`;
       }).join("");
       return `<div class="detail">
         <div><h4>Treść sprawy</h4><div class="casetext">${esc(it.input)}</div></div>
@@ -631,5 +674,6 @@ python3 scripts/evaluate.py --predictions results/run.jsonl --report results/run
   })();
 })();
 </script>
+__ANALYTICS__
 </body>
 </html>
