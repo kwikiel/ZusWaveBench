@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZusWaveBench — benchmark polskich spraw urzędowych</title>
+<meta name="description" content="ZusWaveBench: benchmark sprawdzający, czy modele LLM rozumieją polskie sprawy administracyjne, podatkowe, ZUS i e-government na tyle, by doradzić praktyczny następny krok. Wyniki dla Gemma 4 26B, Bielik 11B v3 i PLLuM 12B.">
+<meta property="og:title" content="ZusWaveBench">
+<meta property="og:description" content="Benchmark polskich spraw urzędowych dla modeli LLM — tablica wyników.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   ZusWaveBench — ZusWave aesthetic
+   pastel gradient desktop · green marble · Win98 chrome · columns
+   ============================================================ */
+:root{
+  --ui: Tahoma, Geneva, Verdana, "DejaVu Sans", sans-serif;
+  --mono: "VT323", "Courier New", monospace;
+  --display: "Anton", Impact, sans-serif;
+  --gray:#c3c7cb; --gray-lo:#9aa0a6; --gray-hi:#ffffff; --gray-sh:#5a5f63;
+  --ink:#10231a; --navy:#0a246a;
+  --stone-d:#0c4f27; --stone:#1f7a40; --stone-l:#3da564;
+  --pink:#f3d3e7; --lav:#e6d8ee; --sky:#cfe0f4; --mint:#bfe6cf;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; font-family:var(--ui); color:var(--ink); font-size:15px; line-height:1.5;
+  background:#1c5c34;
+}
+/* outer green-marble frame */
+.page{
+  min-height:100vh; padding:clamp(8px,2.4vw,26px); padding-bottom:64px;
+  background-color:#155232;
+  background-image:
+    radial-gradient(ellipse at 18% 22%, rgba(190,240,205,.30), transparent 42%),
+    radial-gradient(ellipse at 78% 38%, rgba(0,0,0,.40), transparent 46%),
+    radial-gradient(ellipse at 52% 84%, rgba(120,220,160,.28), transparent 44%),
+    radial-gradient(ellipse at 88% 86%, rgba(0,0,0,.30), transparent 40%),
+    repeating-linear-gradient(118deg, rgba(255,255,255,.05) 0 2px, transparent 2px 11px),
+    repeating-linear-gradient(28deg, rgba(0,0,0,.07) 0 3px, transparent 3px 14px);
+}
+/* pastel gradient desktop */
+.desktop{
+  position:relative; border:3px solid #07371f; box-shadow:0 0 0 2px rgba(255,255,255,.25);
+  background:linear-gradient(158deg,#bfe6cf 0%,#cfe6d6 12%,#e6d8ee 38%,#f3d3e7 56%,#cfe0f4 76%,#bfe3e0 100%);
+  overflow:hidden;
+}
+/* faint vaporwave perspective grid in the desktop floor */
+.desktop::after{
+  content:""; position:absolute; inset:auto 0 0 0; height:42%; pointer-events:none; opacity:.16;
+  background:
+    repeating-linear-gradient(90deg, rgba(11,79,39,.9) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(0deg, rgba(11,79,39,.9) 0 1px, transparent 1px 40px);
+  transform:perspective(420px) rotateX(58deg); transform-origin:bottom;
+}
+.wrap{position:relative; z-index:2; max-width:1080px; margin:0 auto; padding:clamp(14px,3vw,34px) clamp(12px,3vw,30px) 40px}
+
+/* ---------- hero ---------- */
+.hero{position:relative; text-align:center; padding:18px 0 8px}
+.columns{position:absolute; inset:0; display:flex; justify-content:space-between; pointer-events:none; z-index:0}
+.columns svg{height:100%; opacity:.55; filter:drop-shadow(0 8px 10px rgba(8,40,22,.25))}
+.columns svg:last-child{transform:scaleX(-1)}
+.hero-inner{position:relative; z-index:1}
+.kicker{font-family:var(--mono); font-size:1.5rem; letter-spacing:.32em; color:#0c4f27; text-transform:uppercase; margin:0 0 2px}
+.wordmark{width:min(680px,92%); height:auto; display:block; margin:0 auto;
+  filter:drop-shadow(4px 5px 0 rgba(7,55,31,.6)) drop-shadow(0 3px 14px rgba(0,0,0,.3))}
+.wmText{font-family:var(--display); font-size:172px; letter-spacing:3px}
+.tagline{max-width:640px; margin:6px auto 0; font-size:1.05rem; color:#173b28; text-shadow:0 1px 0 rgba(255,255,255,.5)}
+.lang{font-size:.9rem; color:#2c5a40; margin-top:2px}
+.badges{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:16px auto 6px}
+.badge{font-family:var(--mono); font-size:1.15rem; line-height:1; padding:6px 10px 4px; background:var(--gray);
+  border:2px solid; border-color:var(--gray-hi) var(--gray-sh) var(--gray-sh) var(--gray-hi);
+  box-shadow:1px 1px 0 #000; color:#10231a}
+.badge b{font-family:var(--ui); font-size:1.5rem; display:block; line-height:1; margin-bottom:2px; color:#0a3c22}
+
+/* mini decorative windows in hero */
+.trinkets{display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:16px}
+.trinket{width:150px}
+.beach{height:74px; background:linear-gradient(#7fd0ff 0 52%, #ffe9a8 52% 70%, #f2c869 70%); position:relative; overflow:hidden}
+.beach .sun{position:absolute; top:8px; right:14px; width:16px; height:16px; border-radius:50%; background:#fff7c7; box-shadow:0 0 8px #fff3a0}
+.beach .palm{position:absolute; bottom:2px; left:16px; font-size:26px; line-height:1}
+.lattice{height:74px; display:grid; place-items:center; background:#0d1e14}
+
+/* ---------- Win98 windows ---------- */
+.win{margin:26px 0; background:var(--gray);
+  border:2px solid; border-color:var(--gray-hi) #000 #000 var(--gray-hi);
+  box-shadow:inset 1px 1px 0 #dfe3e6, inset -1px -1px 0 var(--gray-sh), 4px 5px 0 rgba(7,40,22,.32)}
+.win__bar{display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:3px 4px 3px 6px; color:#fff; font-weight:bold; font-size:.92rem;
+  background:linear-gradient(90deg,#07371f 0%,#0a246a 40%,#2f7fb0 100%)}
+.win__bar .ttl{display:flex; align-items:center; gap:7px; text-shadow:1px 1px 0 rgba(0,0,0,.4); overflow:hidden; white-space:nowrap; text-overflow:ellipsis}
+.win__bar .ico{font-size:1rem}
+.win__btns{display:flex; gap:3px; flex:0 0 auto}
+.win__btns span{width:18px; height:16px; display:grid; place-items:center; font-family:var(--ui); font-size:.7rem; font-weight:bold; color:#000;
+  background:var(--gray); border:2px solid; border-color:var(--gray-hi) var(--gray-sh) var(--gray-sh) var(--gray-hi)}
+.win__body{padding:14px 15px 16px; background:#dfe3e6; border-top:1px solid var(--gray-hi)}
+.win__body.white{background:#fbfbf7}
+.win h2{margin:0 0 4px; font-family:var(--display); font-size:1.4rem; letter-spacing:1px; color:#0a3c22}
+.win .sub{margin:0 0 14px; color:#3a4a40; font-size:.92rem}
+
+/* ---------- leaderboard ---------- */
+.board{display:flex; flex-direction:column; gap:10px}
+.row{display:grid; grid-template-columns:30px 1fr; gap:12px; align-items:center;
+  background:#fff; border:2px solid; border-color:var(--gray-sh) var(--gray-hi) var(--gray-hi) var(--gray-sh); padding:11px 13px}
+.row.lead{background:linear-gradient(100deg,#eafff0,#fff)}
+.rank{font-family:var(--display); font-size:1.5rem; color:#0a3c22; text-align:center}
+.rank .medal{font-size:1.2rem; display:block}
+.rh{display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; margin-bottom:7px}
+.rh .name{font-weight:bold; font-size:1.08rem; color:#10231a}
+.rh .meta{font-size:.82rem; color:#5a6b60; font-family:var(--mono); font-size:1rem}
+.scoreline{display:flex; align-items:center; gap:10px}
+.bar{flex:1; height:20px; background:#e7ebe6; border:1px solid var(--gray-sh); position:relative; overflow:hidden}
+.bar i{position:absolute; inset:0 auto 0 0; background:linear-gradient(90deg,#1f7a40,#4fd089); display:block}
+.bar .pct{position:absolute; right:6px; top:50%; transform:translateY(-50%); font-weight:bold; font-size:.82rem; color:#0a3c22; text-shadow:0 1px 0 rgba(255,255,255,.6)}
+.stats{display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:9px; font-size:.84rem; color:#3a4a40}
+.stats span b{color:#10231a}
+.stats .k{font-family:var(--mono); font-size:1rem}
+
+/* ---------- heatmaps ---------- */
+.heat{width:100%; border-collapse:collapse; font-size:.86rem; background:#fff}
+.heat th,.heat td{border:1px solid #b9c2bb; padding:7px 9px; text-align:center}
+.heat th{background:#0a3c22; color:#dff3e6; font-weight:bold; position:sticky}
+.heat td.lbl{text-align:left; font-weight:bold; color:#10231a; background:#eef3ee; white-space:nowrap}
+.heat td.lbl small{display:block; font-weight:normal; color:#6a786f; font-family:var(--mono); font-size:.92rem}
+.heat td.cnt{font-family:var(--mono); color:#5a6b60; background:#f4f7f4}
+.cell{font-weight:bold; color:#10231a; font-variant-numeric:tabular-nums}
+.scroll-x{overflow-x:auto}
+
+/* ---------- explorer ---------- */
+.controls{display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin-bottom:14px}
+.ctl{display:flex; flex-direction:column; gap:3px}
+.ctl label{font-size:.76rem; font-weight:bold; color:#3a4a40; text-transform:uppercase; letter-spacing:.04em}
+.ctl select,.ctl input{font-family:var(--ui); font-size:.9rem; padding:5px 7px; background:#fff;
+  border:2px solid; border-color:var(--gray-sh) var(--gray-hi) var(--gray-hi) var(--gray-sh)}
+.ctl input{min-width:190px}
+.count{margin-left:auto; align-self:center; font-family:var(--mono); font-size:1.05rem; color:#3a4a40}
+.cases{display:flex; flex-direction:column; gap:7px}
+.case{background:#fff; border:2px solid; border-color:var(--gray-hi) var(--gray-sh) var(--gray-sh) var(--gray-hi)}
+.case>summary{list-style:none; cursor:pointer; display:grid;
+  grid-template-columns:118px 1fr auto; gap:10px; align-items:center; padding:9px 11px}
+.case>summary::-webkit-details-marker{display:none}
+.case[open]>summary{background:#eef3ee; border-bottom:1px solid #c7cfc8}
+.cid{font-family:var(--mono); font-size:1.05rem; color:#0a3c22; font-weight:bold}
+.cmeta{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.chip{font-size:.72rem; padding:2px 7px; border-radius:10px; background:#e6efe9; color:#23503a; border:1px solid #bcd2c4; white-space:nowrap}
+.chip.task{background:#efe6f3; color:#5b3a6e; border-color:#d4bce0}
+.diff{color:#caa53a; letter-spacing:1px; font-size:.85rem}
+.pills{display:flex; gap:5px}
+.pill{font-family:var(--mono); font-size:.95rem; font-weight:bold; padding:3px 7px 1px; border-radius:4px; color:#10231a; min-width:42px; text-align:center; border:1px solid rgba(0,0,0,.18)}
+.pill em{font-style:normal; font-size:.6rem; display:block; opacity:.7; letter-spacing:.02em}
+.detail{padding:14px 14px 16px; display:grid; gap:14px; grid-template-columns:1fr; background:#fbfbf7}
+.detail h4{margin:0 0 6px; font-size:.82rem; text-transform:uppercase; letter-spacing:.06em; color:#0a3c22}
+.casetext{background:#fff8e6; border:1px solid #e6d79a; border-left:4px solid #caa53a; padding:10px 12px; font-size:.96rem}
+.gold{background:#eef6f0; border:1px solid #bcd6c5; padding:10px 12px}
+.kv{display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:.9rem; margin:0}
+.kv dt{font-weight:bold; color:#23503a}
+.kv dd{margin:0}
+.tags{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px}
+.tag{font-size:.74rem; padding:1px 7px; border-radius:9px; background:#dcefe2; color:#1d5235; border:1px solid #a9d6ba}
+.tag.bad{background:#ffe0e0; color:#8a2020; border-color:#e6a9a9}
+.answers{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.mcard{background:#fff; border:2px solid; border-color:var(--gray-sh) var(--gray-hi) var(--gray-hi) var(--gray-sh); padding:10px 11px}
+.mcard .mh{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px}
+.mcard .mn{font-weight:bold; font-size:.92rem}
+.mcard .ms{font-family:var(--mono); font-size:1.05rem; font-weight:bold; padding:1px 7px; border-radius:4px; border:1px solid rgba(0,0,0,.18)}
+.resp{font-size:.86rem}
+.resp dt{font-weight:bold; color:#3a4a40; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; margin-top:6px}
+.resp dd{margin:0 0 1px}
+.resp .raw{font-family:var(--mono); white-space:pre-wrap; background:#f2f2ec; padding:6px; font-size:.92rem}
+.flags{margin-top:8px; display:flex; flex-wrap:wrap; gap:4px}
+.notjson{font-size:.72rem; color:#8a2020; font-weight:bold}
+
+/* ---------- methodology ---------- */
+.cols2{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.method p{margin:0 0 10px}
+.wtable{width:100%; border-collapse:collapse; font-size:.9rem; margin:6px 0 0}
+.wtable td{border:1px solid #c2cbc4; padding:5px 9px}
+.wtable td:last-child{text-align:right; font-family:var(--mono); font-size:1.05rem; font-weight:bold; width:70px}
+.tlist{margin:0; padding-left:18px}
+.tlist li{margin-bottom:5px}
+.tlist code{font-family:var(--mono); font-size:1rem; background:#eef3ee; padding:0 4px}
+.caveat{margin-top:16px; background:#fff3d6; border:1px solid #e6cf86; border-left:4px solid #d4a72a; padding:11px 13px; font-size:.92rem}
+pre.run{font-family:var(--mono); font-size:1.02rem; background:#0d1e14; color:#9ff0bd; padding:12px 14px; overflow-x:auto; border:2px solid #07371f}
+
+/* ---------- footer ---------- */
+.foot{position:relative; z-index:2; text-align:center; color:#dff3e6; padding:22px 14px 8px; font-size:.86rem}
+.foot a{color:#bff0cf}
+.vapor{font-family:var(--display); font-size:1.1rem; letter-spacing:3px; color:#bff0cf; text-shadow:1px 1px 0 #07371f}
+
+/* ---------- Win98 taskbar ---------- */
+.taskbar{position:fixed; left:0; right:0; bottom:0; height:38px; z-index:50; display:flex; align-items:center; gap:6px; padding:3px 5px;
+  background:var(--gray); border-top:2px solid var(--gray-hi); box-shadow:0 -1px 0 var(--gray-sh)}
+.start{display:flex; align-items:center; gap:6px; font-weight:bold; font-style:italic; padding:3px 11px 3px 8px; cursor:default;
+  background:var(--gray); border:2px solid; border-color:var(--gray-hi) var(--gray-sh) var(--gray-sh) var(--gray-hi)}
+.start b{font-family:var(--display); font-style:normal; color:#0a3c22; letter-spacing:1px}
+.tasks{display:flex; gap:5px; overflow:hidden}
+.tasks a{font-size:.82rem; color:#10231a; text-decoration:none; padding:4px 10px; white-space:nowrap;
+  background:var(--gray); border:2px solid; border-color:var(--gray-hi) var(--gray-sh) var(--gray-sh) var(--gray-hi)}
+.tasks a:hover{background:#d2d6da}
+.tray{margin-left:auto; display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:1rem; padding:4px 10px;
+  border:2px solid; border-color:var(--gray-sh) var(--gray-hi) var(--gray-hi) var(--gray-sh)}
+
+@media (max-width:560px){
+  .case>summary{grid-template-columns:1fr; gap:6px}
+  .pills{justify-content:flex-start}
+  .tasks a{padding:4px 7px}
+  .start b{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- hidden SVG defs: green-marble filter + stone gradient -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="marbleFx">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.021" numOctaves="6" seed="11" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0   0 0 0 -1.5 1.05" result="veins"/>
+    </filter>
+    <filter id="marbleHi">
+      <feTurbulence type="fractalNoise" baseFrequency="0.013 0.03" numOctaves="5" seed="42" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 .78  0 0 0 0 .97  0 0 0 0 .83  0 0 0 -2.2 1.1"/>
+    </filter>
+    <linearGradient id="stoneGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fbf78"/>
+      <stop offset="0.45" stop-color="#1f7a40"/>
+      <stop offset="1" stop-color="#0a4421"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="page">
+<div class="desktop">
+<div class="wrap">
+
+  <!-- ===================== HERO ===================== -->
+  <header class="hero">
+    <div class="columns" aria-hidden="true">
+      <svg viewBox="0 0 70 360" preserveAspectRatio="xMidYMax meet">
+        <rect x="6" y="44" width="58" height="14" fill="#f1efe6"/>
+        <rect x="2" y="36" width="66" height="9" fill="#e3e0d3"/>
+        <rect x="10" y="58" width="50" height="270" fill="#eceadf"/>
+        <g stroke="#cdcabb" stroke-width="2">
+          <line x1="18" y1="58" x2="18" y2="328"/><line x1="26" y1="58" x2="26" y2="328"/>
+          <line x1="35" y1="58" x2="35" y2="328"/><line x1="44" y1="58" x2="44" y2="328"/>
+          <line x1="52" y1="58" x2="52" y2="328"/>
+        </g>
+        <rect x="4" y="328" width="62" height="14" fill="#e3e0d3"/>
+        <rect x="0" y="342" width="70" height="14" fill="#d7d4c6"/>
+      </svg>
+      <svg viewBox="0 0 70 360" preserveAspectRatio="xMidYMax meet">
+        <rect x="6" y="44" width="58" height="14" fill="#f1efe6"/>
+        <rect x="2" y="36" width="66" height="9" fill="#e3e0d3"/>
+        <rect x="10" y="58" width="50" height="270" fill="#eceadf"/>
+        <g stroke="#cdcabb" stroke-width="2">
+          <line x1="18" y1="58" x2="18" y2="328"/><line x1="26" y1="58" x2="26" y2="328"/>
+          <line x1="35" y1="58" x2="35" y2="328"/><line x1="44" y1="58" x2="44" y2="328"/>
+          <line x1="52" y1="58" x2="52" y2="328"/>
+        </g>
+        <rect x="4" y="328" width="62" height="14" fill="#e3e0d3"/>
+        <rect x="0" y="342" width="70" height="14" fill="#d7d4c6"/>
+      </svg>
+    </div>
+
+    <div class="hero-inner">
+      <p class="kicker">ｂｅｎｃｈｍａｒｋ</p>
+      <svg class="wordmark" viewBox="0 0 760 200" role="img" aria-label="ZusWave">
+        <defs>
+          <clipPath id="wmClip">
+            <text x="380" y="150" text-anchor="middle" class="wmText">ZUSWAVE</text>
+          </clipPath>
+        </defs>
+        <g clip-path="url(#wmClip)">
+          <rect x="0" y="0" width="760" height="200" fill="url(#stoneGrad)"/>
+          <rect x="0" y="0" width="760" height="200" fill="#0a4421" filter="url(#marbleFx)"/>
+          <rect x="0" y="0" width="760" height="200" filter="url(#marbleHi)" opacity="0.55"/>
+        </g>
+        <text x="380" y="150" text-anchor="middle" class="wmText" fill="none"
+              stroke="#063318" stroke-width="3" paint-order="stroke">ZUSWAVE</text>
+      </svg>
+      <p class="tagline">Czy model językowy rozumie polskie sprawy urzędowe na tyle, by doradzić właściwy <b>następny krok</b>? Administracja, podatki, ZUS, e‑government, rejestry i pisma — nie quiz ze słówek, lecz realne mikro‑przypadki.</p>
+      <p class="lang">A benchmark for Polish administrative / tax / ZUS / e‑government reasoning in LLMs.</p>
+      <div class="badges" id="badges"></div>
+
+      <div class="trinkets" aria-hidden="true">
+        <div class="win trinket"><div class="win__bar"><span class="ttl"><span class="ico">🖼️</span>wakacje.bmp</span><div class="win__btns"><span>_</span><span>×</span></div></div><div class="beach"><div class="sun"></div><div class="palm">🌴</div></div></div>
+        <div class="win trinket"><div class="win__bar"><span class="ttl"><span class="ico">🔬</span>perowskit.mol</span><div class="win__btns"><span>_</span><span>×</span></div></div><div class="lattice">
+          <svg viewBox="0 0 120 70" width="120" height="70">
+            <g fill="#2f9d5b" stroke="#bff0cf" stroke-width="1.1">
+              <g id="oct"><polygon points="12,8 19,15 12,22 5,15"/></g>
+              <use href="#oct" x="20"/><use href="#oct" x="40"/><use href="#oct" x="60"/><use href="#oct" x="80"/>
+              <g transform="translate(0,18)"><use href="#oct"/><use href="#oct" x="20"/><use href="#oct" x="40"/><use href="#oct" x="60"/><use href="#oct" x="80"/></g>
+              <g transform="translate(0,36)"><use href="#oct"/><use href="#oct" x="20"/><use href="#oct" x="40"/><use href="#oct" x="60"/><use href="#oct" x="80"/></g>
+            </g>
+          </svg>
+        </div></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== LEADERBOARD ===================== -->
+  <section class="win" id="leaderboard">
+    <div class="win__bar"><span class="ttl"><span class="ico">🏆</span>Tablica wyników — ZUSWAVE.exe</span>
+      <div class="win__btns"><span>_</span><span>□</span><span>×</span></div></div>
+    <div class="win__body">
+      <h2>Tablica wyników</h2>
+      <p class="sub">Wynik ważony na pełnym zestawie (waga = trudność × ryzyko domeny). Wyższy = lepiej.</p>
+      <div class="board" id="board"></div>
+    </div>
+  </section>
+
+  <!-- ===================== DOMAINS ===================== -->
+  <section class="win" id="domains">
+    <div class="win__bar"><span class="ttl"><span class="ico">🗂️</span>Wyniki wg domeny</span>
+      <div class="win__btns"><span>_</span><span>□</span><span>×</span></div></div>
+    <div class="win__body white">
+      <h2>Według domeny</h2>
+      <p class="sub">Mocne i słabe strony w każdym obszarze. Komórki kolorowane od koralowego (słabo) do miętowego (mocno).</p>
+      <div class="scroll-x"><table class="heat" id="domainHeat"></table></div>
+    </div>
+  </section>
+
+  <!-- ===================== TASKS ===================== -->
+  <section class="win" id="tasks">
+    <div class="win__bar"><span class="ttl"><span class="ico">🧩</span>Wyniki wg typu zadania</span>
+      <div class="win__btns"><span>_</span><span>□</span><span>×</span></div></div>
+    <div class="win__body white">
+      <h2>Według typu zadania</h2>
+      <p class="sub">Osiem rodzin zadań — od klasyfikacji pism po przepisywanie pism obywatela na język urzędowy.</p>
+      <div class="scroll-x"><table class="heat" id="taskHeat"></table></div>
+    </div>
+  </section>
+
+  <!-- ===================== EXPLORER ===================== -->
+  <section class="win" id="explorer">
+    <div class="win__bar"><span class="ttl"><span class="ico">📂</span>Przeglądarka przypadków — Moje dokumenty</span>
+      <div class="win__btns"><span>_</span><span>□</span><span>×</span></div></div>
+    <div class="win__body">
+      <h2>Przeglądarka przypadków</h2>
+      <p class="sub">Wszystkie pozycje benchmarku. Kliknij sprawę, aby zobaczyć treść, wzorzec (gold) i odpowiedzi modeli.</p>
+      <div class="controls">
+        <div class="ctl"><label for="fDomain">Domena</label>
+          <select id="fDomain"><option value="">wszystkie</option></select></div>
+        <div class="ctl"><label for="fTask">Zadanie</label>
+          <select id="fTask"><option value="">wszystkie</option></select></div>
+        <div class="ctl"><label for="fSort">Sortuj</label>
+          <select id="fSort">
+            <option value="id">wg ID</option>
+            <option value="hard">najtrudniejsze (śr. wynik ↑)</option>
+            <option value="easy">najłatwiejsze (śr. wynik ↓)</option>
+            <option value="gap">największy rozrzut modeli</option>
+          </select></div>
+        <div class="ctl"><label for="fSearch">Szukaj w treści</label>
+          <input id="fSearch" type="search" placeholder="np. wezwanie, ZUS, WSA…"></div>
+        <div class="count" id="caseCount"></div>
+      </div>
+      <div class="cases" id="cases"></div>
+    </div>
+  </section>
+
+  <!-- ===================== METHODOLOGY ===================== -->
+  <section class="win" id="method">
+    <div class="win__bar"><span class="ttl"><span class="ico">📐</span>Metodologia i punktacja</span>
+      <div class="win__btns"><span>_</span><span>□</span><span>×</span></div></div>
+    <div class="win__body white method">
+      <h2>Jak liczymy wynik</h2>
+      <div class="cols2">
+        <div>
+          <p>Każda pozycja jest punktowana od 0 do 1 metodą deterministyczną — celem jest praktyczna niezawodność, nie uroda prozy. Wynik ważony to średnia ważona wagą pozycji (trudność × ryzyko domeny).</p>
+          <table class="wtable" id="wtable"></table>
+          <p class="caveat" id="caveat"></p>
+        </div>
+        <div>
+          <h4 style="margin-bottom:8px">Rodziny zadań</h4>
+          <ul class="tlist">
+            <li><code>document_classification</code> — rozpoznaj pismo i jego skutek.</li>
+            <li><code>remedy_selection</code> — wskaż właściwy środek / następny krok.</li>
+            <li><code>term_disambiguation</code> — rozróżnij mylone pary pojęć.</li>
+            <li><code>form_symbol_extraction</code> — wyłuskaj symbole formularzy, okresy, terminy.</li>
+            <li><code>organ_competence</code> — wskaż właściwy organ.</li>
+            <li><code>abbreviation_expansion</code> — rozwiń skrót i powiedz, czym <i>nie</i> jest.</li>
+            <li><code>deadline_reasoning</code> — interpretuj terminy bez nadinterpretacji.</li>
+            <li><code>style_transformation</code> — przepisz pismo obywatela bez zmyślania podstaw prawnych.</li>
+          </ul>
+        </div>
+      </div>
+      <h4 style="margin:18px 0 6px">Odtwórz wyniki</h4>
+      <pre class="run">git clone https://github.com/kwikiel/ZusWaveBench
+cd ZusWaveBench
+python3 scripts/validate_dataset.py
+export OPENAI_API_KEY="…"  OPENAI_MODEL="…"
+python3 scripts/run_openai_compat.py --output results/run.jsonl
+python3 scripts/evaluate.py --predictions results/run.jsonl --report results/run_report.md</pre>
+    </div>
+  </section>
+
+</div><!-- /wrap -->
+</div><!-- /desktop -->
+
+<footer class="foot">
+  <p class="vapor">▼ ＺＵＳＷＡＶＥ ▼</p>
+  <p>ZusWaveBench sprawdza lokalne rozumowanie i terminologię, a nie jakość porady prawnej.
+     Przed użyciem do decyzji o zgodności odśwież dane względem aktualnych źródeł urzędowych.</p>
+  <p id="footmeta"></p>
+</footer>
+</div><!-- /page -->
+
+<!-- Win98 taskbar -->
+<div class="taskbar">
+  <div class="start"><span>🪟</span><b>ZusWave</b></div>
+  <nav class="tasks">
+    <a href="#leaderboard">🏆 Tablica</a>
+    <a href="#domains">🗂️ Domeny</a>
+    <a href="#tasks">🧩 Zadania</a>
+    <a href="#explorer">📂 Przypadki</a>
+    <a href="#method">📐 Metoda</a>
+  </nav>
+  <div class="tray"><span id="clock">--:--</span></div>
+</div>
+
+<script id="zwb-data" type="application/json">__ZWB_DATA__</script>
+<script>
+(function(){
+  "use strict";
+  const D = JSON.parse(document.getElementById("zwb-data").textContent);
+  const $ = (s,r=document)=>r.querySelector(s);
+  const el = (t,c,h)=>{const n=document.createElement(t); if(c)n.className=c; if(h!=null)n.innerHTML=h; return n;};
+  const esc = s => String(s==null?"":s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+  const pct = x => Math.round(x*100);
+  const titize = s => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+
+  // score -> coral..amber..mint background
+  function heatColor(s){
+    const t = Math.max(0, Math.min(1, (s-0.30)/0.50)); // 0.30..0.80 visual range
+    const stops = [[233,140,120],[235,200,110],[120,196,140]]; // coral, amber, mint
+    let a,b,f;
+    if(t<0.5){a=stops[0];b=stops[1];f=t/0.5;} else {a=stops[1];b=stops[2];f=(t-0.5)/0.5;}
+    const c = a.map((v,i)=>Math.round(v+(b[i]-v)*f));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+  const itemAvg = it => { const v=D.models.map(m=>it.models[m.key].score); return v.reduce((a,b)=>a+b,0)/v.length; };
+  const itemGap = it => { const v=D.models.map(m=>it.models[m.key].score); return Math.max(...v)-Math.min(...v); };
+
+  /* ---------- hero badges ---------- */
+  (function(){
+    const b = $("#badges");
+    const items = [
+      [D.meta.items,"przypadków"],[D.meta.models,"modele"],
+      [D.meta.domains,"domen"],[D.meta.tasks,"typy zadań"]
+    ];
+    items.forEach(([n,l])=> b.appendChild(el("span","badge",`<b>${n}</b>${l}`)));
+  })();
+
+  /* ---------- leaderboard ---------- */
+  (function(){
+    const wrap = $("#board");
+    const medals = ["🥇","🥈","🥉"];
+    D.models.forEach((m,i)=>{
+      const row = el("div","row"+(i===0?" lead":""));
+      row.appendChild(el("div","rank", (medals[i]?`<span class="medal">${medals[i]}</span>`:"")+(i+1)));
+      const main = el("div");
+      main.appendChild(el("div","rh",
+        `<span class="name">${esc(m.name)}</span>
+         <span class="meta">${esc(m.runtime)} · ${esc(m.quant)}</span>`));
+      const sl = el("div","scoreline");
+      const bar = el("div","bar");
+      bar.innerHTML = `<i style="width:${pct(m.score)}%"></i><span class="pct">${m.score.toFixed(3)}</span>`;
+      sl.appendChild(bar);
+      main.appendChild(sl);
+      main.appendChild(el("div","stats",
+        `<span class="k"><b>${m.json_valid}/${m.json_total}</b> poprawny JSON</span>
+         <span class="k">⏱ <b>${m.latency!=null?m.latency+"s":"—"}</b> śr. latencja</span>
+         <span class="k">🔡 <b>${m.tokens.toLocaleString("pl")}</b> tokenów</span>
+         <span class="k">💸 <b>${esc(m.cost)}</b></span>
+         <span class="k">⚠ <b>${m.errors}</b> błędów</span>`));
+      row.appendChild(main);
+      wrap.appendChild(row);
+    });
+  })();
+
+  /* ---------- heatmaps ---------- */
+  function countBy(field){const c={}; D.items.forEach(it=>{c[it[field]]=(c[it[field]]||0)+1;}); return c;}
+  function buildHeat(tableSel, keys, scoreMap, field){
+    const table = $(tableSel);
+    const counts = countBy(field);
+    const head = el("tr"); head.appendChild(el("th",null,field==="domain"?"Domena":"Zadanie"));
+    head.appendChild(el("th",null,"Poz."));
+    D.models.forEach(m=>head.appendChild(el("th",null,esc(m.short))));
+    const thead = el("thead"); thead.appendChild(head); table.appendChild(thead);
+    const tb = el("tbody");
+    // order rows by best model's score, descending
+    const top = D.models[0].key;
+    const ordered = keys.slice().sort((a,b)=>scoreMap[top][b]-scoreMap[top][a]);
+    ordered.forEach(k=>{
+      const tr = el("tr");
+      tr.appendChild(el("td","lbl", field==="domain"?titize(k):`${titize(k)}`));
+      tr.appendChild(el("td","cnt", counts[k]||0));
+      D.models.forEach(m=>{
+        const s = scoreMap[m.key][k];
+        const td = el("td","cell", s.toFixed(3));
+        td.style.background = heatColor(s);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+  }
+  buildHeat("#domainHeat", D.domains, D.domainScores, "domain");
+  buildHeat("#taskHeat", D.tasks, D.taskScores, "task");
+
+  /* ---------- methodology weights ---------- */
+  (function(){
+    const t = $("#wtable");
+    const rows = [
+      ["Trafność etykiet (labels)", D.weights.labels],
+      ["Wymagane pojęcia (required_concepts)", D.weights.required_concepts],
+      ["Kara za zakazane twierdzenia (forbidden)", D.weights.forbidden_penalty],
+      ["Poprawny JSON (json_validity)", D.weights.json_validity],
+    ];
+    rows.forEach(([l,v])=>{const tr=el("tr"); tr.appendChild(el("td",null,esc(l))); tr.appendChild(el("td",null,v.toFixed(2))); t.appendChild(tr);});
+    $("#caveat").innerHTML = "Zakazane twierdzenia są karane mocno: płynna odpowiedź typu „złóż odwołanie” na pismo niebędące decyzją albo „zapłać natychmiast” na zwykłe wezwanie do wyjaśnień traci dużo punktów.";
+    $("#footmeta").innerHTML = `${D.meta.items} przypadków · ${D.meta.models} modele · zbudowano ${esc(D.meta.generated)} · `+
+      `<a href="https://github.com/kwikiel/ZusWaveBench">źródło i dane na GitHubie</a>`;
+  })();
+
+  /* ---------- explorer ---------- */
+  (function(){
+    const fDomain=$("#fDomain"), fTask=$("#fTask"), fSort=$("#fSort"), fSearch=$("#fSearch"),
+          cases=$("#cases"), countEl=$("#caseCount");
+    D.domains.forEach(d=>{const o=el("option",null,titize(d)); o.value=d; fDomain.appendChild(o);});
+    D.tasks.forEach(t=>{const o=el("option",null,titize(t)); o.value=t; fTask.appendChild(o);});
+
+    function pill(m, r){
+      const c = heatColor(r.score);
+      return `<span class="pill" style="background:${c}" title="${esc(m.short)}: ${r.score.toFixed(3)}">${r.score.toFixed(2)}<em>${esc(m.short.split(" ")[0])}</em></span>`;
+    }
+    function respHtml(r){
+      if(r.response_is_json && r.response && typeof r.response==="object"){
+        const f = r.response, parts=[];
+        const line=(label,val)=>{ if(val==null||val==="") return;
+          if(Array.isArray(val)){ if(!val.length) return; val=val.map(esc).join(" · "); } else val=esc(val);
+          parts.push(`<dt>${label}</dt><dd>${val}</dd>`);};
+        line("typ pisma",f.document_type); line("skutek",f.legal_effect); line("środek",f.remedy);
+        line("organ",f.organ); line("odpowiedź",f.answer); line("następne kroki",f.next_steps);
+        line("flagi ryzyka",f.risk_flags); line("kluczowe pojęcia",f.key_terms);
+        return parts.length?`<dl class="resp">${parts.join("")}</dl>`:`<div class="resp"><div class="raw">${esc(JSON.stringify(f))}</div></div>`;
+      }
+      return `<div class="resp"><div class="notjson">⚠ odpowiedź nie‑JSON</div><div class="raw">${esc(typeof r.response==="string"?r.response:JSON.stringify(r.response)).slice(0,1200)}</div></div>`;
+    }
+    function flags(r){
+      const out=[];
+      (r.missing_labels||[]).forEach(x=>out.push(`<span class="tag bad">brak etykiety: ${esc(x)}</span>`));
+      (r.missing_concepts||[]).forEach(x=>out.push(`<span class="tag bad">brak: ${esc(x)}</span>`));
+      (r.forbidden_hits||[]).forEach(x=>out.push(`<span class="tag bad">⛔ ${esc(x)}</span>`));
+      if(!out.length) out.push(`<span class="tag">trafione w pełni</span>`);
+      return `<div class="flags">${out.join("")}</div>`;
+    }
+    function detailHtml(it){
+      const exp=it.expected;
+      const labels = Object.entries(exp.labels||{}).map(([k,v])=>
+        `<dt>${esc(k)}</dt><dd>${esc(typeof v==="boolean"?(v?"tak":"nie"):v)}</dd>`).join("");
+      const req = (exp.required_concepts||[]).map(c=>`<span class="tag">${esc(c)}</span>`).join("");
+      const forb = (exp.forbidden_claims||[]).map(c=>`<span class="tag bad">⛔ ${esc(c)}</span>`).join("");
+      const answers = D.models.map(m=>{
+        const r=it.models[m.key];
+        return `<div class="mcard">
+          <div class="mh"><span class="mn">${esc(m.short)}</span>
+            <span class="ms" style="background:${heatColor(r.score)}">${r.score.toFixed(2)}</span></div>
+          ${respHtml(r)}${flags(r)}</div>`;
+      }).join("");
+      return `<div class="detail">
+        <div><h4>Treść sprawy</h4><div class="casetext">${esc(it.input)}</div></div>
+        <div><h4>Wzorzec (gold)</h4><div class="gold">
+          <dl class="kv">${labels}</dl>
+          ${req?`<div class="tags">${req}</div>`:""}
+          ${forb?`<div class="tags">${forb}</div>`:""}
+          <p style="margin:8px 0 0;font-size:.88rem;color:#3a4a40"><b>Uwaga:</b> ${esc(exp.notes)}</p>
+        </div></div>
+        <div><h4>Odpowiedzi modeli</h4><div class="answers">${answers}</div></div>
+      </div>`;
+    }
+    function summaryHtml(it){
+      const pills = D.models.map(m=>pill(m,it.models[m.key])).join("");
+      const stars = "★".repeat(it.difficulty)+"☆".repeat(5-it.difficulty);
+      return `<summary>
+        <span class="cid">${esc(it.id)}</span>
+        <span class="cmeta">
+          <span class="chip">${esc(titize(it.domain))}</span>
+          <span class="chip task">${esc(titize(it.task))}</span>
+          <span class="diff" title="trudność ${it.difficulty}/5">${stars}</span>
+        </span>
+        <span class="pills">${pills}</span>
+      </summary>`;
+    }
+    function render(){
+      const dv=fDomain.value, tv=fTask.value, q=fSearch.value.trim().toLowerCase(), sv=fSort.value;
+      let list = D.items.filter(it=>
+        (!dv||it.domain===dv) && (!tv||it.task===tv) &&
+        (!q || it.input.toLowerCase().includes(q) || it.id.toLowerCase().includes(q)));
+      if(sv==="hard") list.sort((a,b)=>itemAvg(a)-itemAvg(b));
+      else if(sv==="easy") list.sort((a,b)=>itemAvg(b)-itemAvg(a));
+      else if(sv==="gap") list.sort((a,b)=>itemGap(b)-itemGap(a));
+      else list.sort((a,b)=>a.id<b.id?-1:1);
+      cases.innerHTML="";
+      list.forEach(it=>{
+        const d=el("details","case");
+        d.innerHTML = summaryHtml(it);
+        d.addEventListener("toggle",function(){
+          if(d.open && !d.dataset.built){ d.insertAdjacentHTML("beforeend", detailHtml(it)); d.dataset.built="1"; }
+        },{once:false});
+        cases.appendChild(d);
+      });
+      countEl.textContent = `${list.length} / ${D.items.length} przypadków`;
+    }
+    [fDomain,fTask,fSort].forEach(e=>e.addEventListener("change",render));
+    fSearch.addEventListener("input",render);
+    render();
+  })();
+
+  /* ---------- taskbar clock ---------- */
+  (function(){
+    const c=$("#clock");
+    const tick=()=>{const d=new Date(); c.textContent=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");};
+    tick(); setInterval(tick,15000);
+  })();
+})();
+</script>
+</body>
+</html>

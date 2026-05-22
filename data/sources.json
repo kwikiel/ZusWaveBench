@@ -1,0 +1,22 @@
+{
+  "kpa": {
+    "title": "Kodeks postepowania administracyjnego",
+    "url": "https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WDU19600300168",
+    "used_for": ["decyzja", "postanowienie", "odwolanie", "zazalenie", "ponaglenie", "zaswiadczenia", "braki formalne"]
+  },
+  "podatki_mikrorachunek": {
+    "title": "Mikrorachunek podatkowy",
+    "url": "https://www.podatki.gov.pl/mikrorachunek-podatkowy/",
+    "used_for": ["PIT", "CIT", "VAT", "mikrorachunek", "symbol formularza", "okres platnosci"]
+  },
+  "zus_ulgi": {
+    "title": "ZUS: ulga na start i skladki preferencyjne",
+    "url": "https://www.zus.pl/firmy/rozliczenia-z-zus/skladki-preferencyjne",
+    "used_for": ["ulga na start", "preferencyjne skladki", "skladka zdrowotna"]
+  },
+  "gov_epuap": {
+    "title": "Gov.pl: serwis ePUAP",
+    "url": "https://www.gov.pl/web/cyfryzacja/serwis-epuap",
+    "used_for": ["ePUAP", "Profil Zaufany", "ESP", "pismo ogolne"]
+  }
+}
