@@ -2,30 +2,30 @@
 
 - Predictions: `results/pllum_12b_q4km_gpu_full.jsonl`
 - Items scored: 48
-- Weighted score: 0.577
+- Weighted score: 0.611
 - JSON-valid rate: 83.3%
 
 ## By Domain
 
 | Domain | Items | Weighted Score |
 |---|---:|---:|
-| abbreviations | 3 | 0.511 |
+| abbreviations | 3 | 0.811 |
 | administration | 8 | 0.530 |
 | adversarial | 4 | 0.453 |
 | civic | 4 | 0.632 |
 | egovernment | 4 | 0.648 |
 | procedure | 4 | 0.722 |
 | property | 4 | 0.586 |
-| registers | 3 | 0.565 |
+| registers | 3 | 0.715 |
 | style | 3 | 0.395 |
 | tax | 6 | 0.550 |
-| zus | 5 | 0.740 |
+| zus | 5 | 0.829 |
 
 ## By Task
 
 | Task | Items | Weighted Score |
 |---|---:|---:|
-| abbreviation_expansion | 8 | 0.518 |
+| abbreviation_expansion | 8 | 0.743 |
 | deadline_reasoning | 3 | 0.705 |
 | document_classification | 5 | 0.449 |
 | form_symbol_extraction | 1 | 0.317 |
@@ -46,5 +46,5 @@
 | PL-CIVIC-003 | civic | organ_competence | 0.317 | organ, gmina, urzad gminy |
 | PL-ADMIN-005 | administration | remedy_selection | 0.350 | document_type, organ, wniesc odwolanie, za posrednictwem organu ktory wydal decyzje |
 | PL-EGOV-004 | egovernment | document_classification | 0.375 | document_type, remedy, sprawdzic albo sprostowac dane, nie klasyczne odwolanie |
-| PL-ID-003 | registers | abbreviation_expansion | 0.375 | answer, AML, nie ewidencja JDG |
 | PL-ADV-001 | adversarial | term_disambiguation | 0.375 | document_type, wszczecie postepowania, nie rozstrzyga meritum |
+| PL-TAX-006 | tax | remedy_selection | 0.425 | document_type, zlozyc wyjasnienie, dolaczyc potwierdzenie przelewu |

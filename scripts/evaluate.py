@@ -137,7 +137,24 @@ def value_matches(parsed: Any, text: str, key: str, expected: Any) -> bool:
         candidate = normalize(parsed[key])
         if expected_text and (expected_text in candidate or candidate in expected_text):
             return True
-    return expected_text in text
+    if expected_text in text:
+        return True
+
+    # `answer` is a free-text area/summary tag ("organy i sady administracyjne"),
+    # which models legitimately phrase as the expansions rather than verbatim.
+    # Credit it when a majority of its key terms appear (inflection-tolerant),
+    # so a correct answer in a different wording is not scored as a miss.
+    if key == "answer":
+        expected_content = _content_tokens(_tokens(expected_text))
+        if len(expected_content) >= 2:
+            if isinstance(parsed, dict) and isinstance(parsed.get(key), str) and parsed[key].strip():
+                haystack = _tokens(normalize(parsed[key]))
+            else:
+                haystack = _tokens(text)
+            present = sum(1 for t in expected_content if any(_tok_match(t, u) for u in haystack))
+            if present / len(expected_content) >= 0.5:
+                return True
+    return False
 
 
 def _tokens(value: str) -> list[str]:
