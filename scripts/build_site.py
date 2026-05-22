@@ -33,6 +33,24 @@ WEIGHTS = {
 # point at the full-benchmark files in results/.
 MODELS = [
     {
+        "key": "opus47",
+        "name": "Claude Opus 4.7",
+        "short": "Opus 4.7",
+        "runtime": "OpenRouter API",
+        "quant": "frontier",
+        "predictions": "openrouter_opus_4_7_full.jsonl",
+        "scores": "openrouter_opus_4_7_full_scores.jsonl",
+    },
+    {
+        "key": "gpt55",
+        "name": "GPT-5.5",
+        "short": "GPT-5.5",
+        "runtime": "OpenRouter API",
+        "quant": "frontier",
+        "predictions": "openrouter_gpt_5_5_full.jsonl",
+        "scores": "openrouter_gpt_5_5_full_scores.jsonl",
+    },
+    {
         "key": "gemma",
         "name": "Gemma 4 26B A4B IT",
         "short": "Gemma 4 26B",
@@ -112,6 +130,9 @@ def main() -> int:
     item_models: dict[str, dict[str, Any]] = defaultdict(dict)
 
     for model in MODELS:
+        if not (RESULTS / model["scores"]).exists() or not (RESULTS / model["predictions"]).exists():
+            print(f"  skip {model['short']}: result files not found yet")
+            continue
         scores = {r["id"]: r for r in load_jsonl(RESULTS / model["scores"])}
         preds = {r["id"]: r for r in load_jsonl(RESULTS / model["predictions"])}
         scored_rows = [scores[it["id"]] for it in items if it["id"] in scores]
@@ -224,6 +245,21 @@ def main() -> int:
     template = TEMPLATE.read_text(encoding="utf-8")
     html = template.replace("__ZWB_DATA__", payload)
     OUTPUT.write_text(html, encoding="utf-8")
+
+    # Keep the markdown comparison table in sync with the site.
+    comp = [
+        "# Model Comparison Full Benchmark",
+        "",
+        "| Model | Items | Weighted score | JSON valid | Avg latency | Total tokens | Cost | Errors |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for m in models_out:
+        lat = f"{m['latency']:.2f}s" if m["latency"] is not None else "—"
+        comp.append(
+            f"| {m['name']} | {m['json_total']} | {m['score']:.3f} | "
+            f"{m['json_valid']}/{m['json_total']} | {lat} | {m['tokens']} | {m['cost']} | {m['errors']} |"
+        )
+    (RESULTS / "model_comparison_full.md").write_text("\n".join(comp) + "\n", encoding="utf-8")
 
     print(f"Wrote {OUTPUT.relative_to(ROOT)} ({len(html):,} bytes)")
     print("Overall weighted scores:")

@@ -19,6 +19,39 @@ DEFAULT_WEIGHTS = {
     "json_validity": 0.05,
 }
 
+# Keys the model is actually instructed to emit (see prompts/system.txt).
+# Gold labels outside this set (e.g. requires_action, is_decision) cannot be
+# scored fairly by free-text matching, so they are excluded from label scoring.
+SCHEMA_KEYS = {
+    "document_type",
+    "legal_effect",
+    "remedy",
+    "organ",
+    "answer",
+    "next_steps",
+    "risk_flags",
+    "key_terms",
+}
+
+# Negation cues (normalized, diacritics stripped). Used to make concept and
+# forbidden-claim matching polarity-aware: "REGON nie jest numerem podatkowym"
+# must NOT count as asserting the forbidden claim "REGON to numer podatkowy".
+NEGATIONS = {
+    "nie", "ani", "bez", "nieprawda", "blednie", "falszywie", "wbrew",
+    "not", "never", "nor", "without", "cannot", "isnt", "arent",  # models sometimes answer in English
+}
+
+# Short Polish function words to ignore when picking "content" tokens. Anything
+# short that is NOT here (e.g. WZ, A1, PIT, ZUS, NIP, KW, UPO) is kept, because
+# those codes are exactly the disambiguators the benchmark cares about.
+SHORT_STOP = {
+    "od", "to", "na", "sie", "czy", "lub", "ani", "do", "za", "po", "te", "ta",
+    "ten", "tym", "tej", "tych", "jej", "ich", "nas", "was", "jak", "gdy", "bo",
+    "co", "aby", "juz", "tez", "oraz", "albo", "nad", "pod", "przy", "bez", "dla",
+    "nie", "ma", "sa", "by", "im", "mu", "go", "ja", "my", "wy", "on", "ona",
+    "ono", "oni", "one", "w", "z", "i", "a", "o", "u", "ze", "we", "do",
+}
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -107,14 +140,126 @@ def value_matches(parsed: Any, text: str, key: str, expected: Any) -> bool:
     return expected_text in text
 
 
-def concept_present(text: str, concept: str) -> bool:
-    normalized = normalize(concept)
-    if normalized in text:
+def _tokens(value: str) -> list[str]:
+    return [t for t in re.split(r"[^a-z0-9]+", value) if t]
+
+
+def _tok_match(a: str, b: str) -> bool:
+    """Loose token equality tolerant of Polish inflection (decyzja/decyzji)."""
+    if a == b:
         return True
-    tokens = [token for token in re.split(r"[^a-z0-9_]+", normalized) if len(token) >= 4]
-    if len(tokens) >= 2:
-        return all(token in text for token in tokens)
+    if len(a) >= 5 and len(b) >= 5 and a[:5] == b[:5]:
+        return True
     return False
+
+
+def _negated(text_tokens: list[str], lo: int, hi: int) -> bool:
+    """True if a negation cue sits inside or just before the [lo, hi] span.
+
+    Polish negation can sit a few words ahead of the phrase
+    ("nie przysluguje od niego odwolanie"), so we look back several tokens.
+    """
+    segment = text_tokens[max(0, lo - 5): hi + 1]
+    return any(t in NEGATIONS for t in segment)
+
+
+def _content_tokens(phrase_tokens: list[str]) -> list[str]:
+    """Distinctive tokens: long words, plus short codes that aren't stopwords."""
+    return [t for t in phrase_tokens if len(t) >= 4 or (len(t) >= 2 and t not in SHORT_STOP)]
+
+
+def concept_present(text: str, concept: str, *, require_polarity: bool = True) -> bool:
+    """Polarity-, proximity- and inflection-aware presence check.
+
+    A phrase counts as present only when its content words appear close together.
+    With require_polarity (default) the local polarity must also match: an
+    affirmative phrase ("X to Y") is not credited inside a negation
+    ("X nie jest Y"). Pass require_polarity=False to detect a mention regardless
+    of polarity (used to find negated mentions of a forbidden claim).
+    """
+    nphrase = normalize(concept)
+    if not nphrase:
+        return False
+    ptokens = _tokens(nphrase)
+    phrase_neg = any(t in NEGATIONS for t in ptokens)
+    content = _content_tokens(ptokens)
+    ttokens = _tokens(text)
+
+    def polarity_ok(lo: int, hi: int) -> bool:
+        return not require_polarity or phrase_neg == _negated(ttokens, lo, hi)
+
+    # No distinctive content words: fall back to exact substring + polarity.
+    if not content:
+        idx = text.find(nphrase)
+        if idx < 0:
+            return False
+        pre = len(_tokens(text[:idx]))
+        return polarity_ok(pre, pre + len(ptokens))
+
+    # Map each content token to the text positions it (inflection-tolerantly) hits.
+    hits = {t: [i for i, u in enumerate(ttokens) if _tok_match(t, u)] for t in content}
+    if any(not pos for pos in hits.values()):
+        return False
+
+    if len(content) == 1:
+        return any(polarity_ok(i, i) for i in hits[content[0]])
+
+    # Multiple content tokens: require them within a tight window.
+    limit = 4 * len(content) + 4
+    rarest = min(content, key=lambda t: len(hits[t]))
+    for anchor in hits[rarest]:
+        lo = hi = anchor
+        ok = True
+        for t in content:
+            near = [i for i in hits[t] if abs(i - anchor) <= limit]
+            if not near:
+                ok = False
+                break
+            lo, hi = min(lo, min(near)), max(hi, max(near))
+        if ok and (hi - lo) <= limit and polarity_ok(lo, hi):
+            return True
+    return False
+
+
+def assertive_prose(parsed: Any) -> str | None:
+    """Concatenate the model's free-text claim fields (not its keyword lists).
+
+    Forbidden claims are about what the model *asserts*, so we ignore enumerated
+    fields like key_terms/risk_flags where merely listing a term is not a claim.
+    """
+    if not isinstance(parsed, dict):
+        return None
+    fields = [
+        parsed.get(k) for k in ("document_type", "legal_effect", "remedy", "organ", "answer")
+    ]
+    prose = ". ".join(v for v in fields if isinstance(v, str) and v.strip())
+    return normalize(prose) if prose else ""
+
+
+def claim_asserted(parsed: Any, text: str, claim: str) -> bool:
+    """True only if the model affirmatively asserts the forbidden claim.
+
+    Checks the prose fields clause by clause so a clause-local negation
+    ("MPZP nie jest decyzja WZ") prevents a false hit.
+    """
+    prose = assertive_prose(parsed)
+    haystack = prose if prose is not None else text
+    if not haystack:
+        return False
+    claim_neg = any(t in NEGATIONS for t in _tokens(normalize(claim)))
+
+    aligned = opposite = False
+    for clause in re.split(r"[.,;:!?]", haystack):
+        if not clause.strip() or not concept_present(clause, claim, require_polarity=False):
+            continue
+        clause_neg = any(t in NEGATIONS for t in _tokens(clause))
+        if clause_neg == claim_neg:
+            aligned = True
+        else:
+            opposite = True
+    # Asserted only if stated with the claim's polarity and never with the
+    # opposite one: "X nie jest Y ... Y to ..." (correct distinction) is not a hit.
+    return aligned and not opposite
 
 
 def score_item(item: dict[str, Any], prediction: dict[str, Any] | None) -> dict[str, Any]:
@@ -127,13 +272,16 @@ def score_item(item: dict[str, Any], prediction: dict[str, Any] | None) -> dict[
             "label_score": 0.0,
             "required_score": 0.0,
             "forbidden_hits": [],
-            "missing_labels": list(item["expected"].get("labels", {}).keys()),
+            "missing_labels": [k for k in item["expected"].get("labels", {}) if k in SCHEMA_KEYS],
             "missing_concepts": item["expected"].get("required_concepts", []),
         }
 
     parsed, json_valid, text = parse_response(prediction.get("response"))
     expected = item["expected"]
-    labels = expected.get("labels", {})
+    # Only score label keys the model is actually asked to emit. Keys like
+    # requires_action / is_decision are not in the output schema, so judging
+    # them by free text is noise; their intent is covered by required_concepts.
+    labels = {k: v for k, v in expected.get("labels", {}).items() if k in SCHEMA_KEYS}
     missing_labels = [
         key
         for key, expected_value in labels.items()
@@ -146,7 +294,7 @@ def score_item(item: dict[str, Any], prediction: dict[str, Any] | None) -> dict[
     required_score = 1.0 if not required else (len(required) - len(missing_concepts)) / len(required)
 
     forbidden = expected.get("forbidden_claims", [])
-    forbidden_hits = [claim for claim in forbidden if concept_present(text, claim)]
+    forbidden_hits = [claim for claim in forbidden if claim_asserted(parsed, text, claim)]
     forbidden_score = 1.0 - (len(forbidden_hits) / len(forbidden) if forbidden else 0.0)
 
     score = (
